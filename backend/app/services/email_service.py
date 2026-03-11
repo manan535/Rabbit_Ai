@@ -1,47 +1,37 @@
-"""Email delivery service using Resend HTTP API."""
+"""Email delivery service using SMTP over SSL."""
 
 import logging
-import httpx
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-RESEND_API_URL = "https://api.resend.com/emails"
-
 
 async def send_summary_email(recipient: str, summary: str, filename: str) -> None:
-    """Send the AI-generated summary via Resend API."""
+    """Send the AI-generated summary via Gmail SMTP (port 465, direct SSL)."""
     settings = get_settings()
 
-    if not settings.RESEND_API_KEY:
-        raise RuntimeError("RESEND_API_KEY is not configured.")
+    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
+        raise RuntimeError("SMTP credentials are not configured.")
 
     html_content = _markdown_to_html(summary, filename)
 
-    payload = {
-        "from": f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>",
-        "to": [recipient],
-        "subject": f"Sales Insight Brief \u2013 {filename}",
-        "html": html_content,
-        "text": summary,
-    }
+    msg = MIMEMultipart("alternative")
+    msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USERNAME}>"
+    msg["To"] = recipient
+    msg["Subject"] = f"Sales Insight Brief \u2013 {filename}"
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(
-            RESEND_API_URL,
-            headers={
-                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
+    msg.attach(MIMEText(summary, "plain"))
+    msg.attach(MIMEText(html_content, "html"))
 
-    if resp.status_code not in (200, 201):
-        error = resp.json().get("message", resp.text)
-        raise RuntimeError(f"Resend API error ({resp.status_code}): {error}")
+    with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
+        server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        server.sendmail(settings.SMTP_USERNAME, recipient, msg.as_string())
 
-    logger.info("Summary email sent to %s via Resend", recipient)
+    logger.info("Summary email sent to %s via SMTP SSL", recipient)
 
 
 def _markdown_to_html(summary: str, filename: str) -> str:
