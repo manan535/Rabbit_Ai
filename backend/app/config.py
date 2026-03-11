@@ -15,12 +15,10 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     AI_MODEL: str = "llama-3.3-70b-versatile"
 
-    # Email (SMTP SSL)
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 465
-    SMTP_USERNAME: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_NAME: str = "Rabbitt AI Sales Insights"
+    # Email (Brevo API)
+    BREVO_API_KEY: str = ""
+    EMAIL_FROM_NAME: str = "Rabbitt AI Sales Insights"
+    EMAIL_FROM_ADDRESS: str = "rabbitai745@gmail.com"
 
     # Rate Limiting
     RATE_LIMIT: str = "10/minute"

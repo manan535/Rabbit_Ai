@@ -1,45 +1,51 @@
-"""Email delivery service using SMTP over SSL."""
+"""Email delivery service using Brevo (Sendinblue) HTTP API."""
 
-import asyncio
 import logging
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import httpx
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-
-def _send_email_sync(recipient: str, summary: str, filename: str, html_content: str) -> None:
-    """Synchronous SMTP send (runs in a thread)."""
-    settings = get_settings()
-
-    msg = MIMEMultipart("alternative")
-    msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USERNAME}>"
-    msg["To"] = recipient
-    msg["Subject"] = f"Sales Insight Brief \u2013 {filename}"
-
-    msg.attach(MIMEText(summary, "plain"))
-    msg.attach(MIMEText(html_content, "html"))
-
-    with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
-        server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-        server.sendmail(settings.SMTP_USERNAME, recipient, msg.as_string())
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 async def send_summary_email(recipient: str, summary: str, filename: str) -> None:
-    """Send the AI-generated summary via Gmail SMTP (port 465, direct SSL)."""
+    """Send the AI-generated summary via Brevo HTTP API."""
     settings = get_settings()
 
-    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
-        raise RuntimeError("SMTP credentials are not configured.")
+    if not settings.BREVO_API_KEY:
+        raise RuntimeError("BREVO_API_KEY is not configured.")
 
     html_content = _markdown_to_html(summary, filename)
 
-    await asyncio.to_thread(_send_email_sync, recipient, summary, filename, html_content)
+    payload = {
+        "sender": {
+            "name": settings.EMAIL_FROM_NAME,
+            "email": settings.EMAIL_FROM_ADDRESS,
+        },
+        "to": [{"email": recipient}],
+        "subject": f"Sales Insight Brief \u2013 {filename}",
+        "htmlContent": html_content,
+        "textContent": summary,
+    }
 
-    logger.info("Summary email sent to %s via SMTP SSL", recipient)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            BREVO_API_URL,
+            headers={
+                "api-key": settings.BREVO_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json=payload,
+        )
+
+    if resp.status_code not in (200, 201):
+        error = resp.json().get("message", resp.text)
+        raise RuntimeError(f"Brevo API error ({resp.status_code}): {error}")
+
+    logger.info("Summary email sent to %s via Brevo", recipient)
 
 
 def _markdown_to_html(summary: str, filename: str) -> str:
