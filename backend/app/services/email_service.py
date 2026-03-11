@@ -1,42 +1,47 @@
-"""Email delivery service using SMTP."""
+"""Email delivery service using Resend HTTP API."""
 
 import logging
-import aiosmtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import httpx
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+RESEND_API_URL = "https://api.resend.com/emails"
+
 
 async def send_summary_email(recipient: str, summary: str, filename: str) -> None:
-    """Send the AI-generated summary via SMTP."""
+    """Send the AI-generated summary via Resend API."""
     settings = get_settings()
 
-    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
-        raise RuntimeError("SMTP credentials are not configured.")
+    if not settings.RESEND_API_KEY:
+        raise RuntimeError("RESEND_API_KEY is not configured.")
 
     html_content = _markdown_to_html(summary, filename)
 
-    msg = MIMEMultipart("alternative")
-    msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USERNAME}>"
-    msg["To"] = recipient
-    msg["Subject"] = f"Sales Insight Brief \u2013 {filename}"
+    payload = {
+        "from": f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>",
+        "to": [recipient],
+        "subject": f"Sales Insight Brief \u2013 {filename}",
+        "html": html_content,
+        "text": summary,
+    }
 
-    msg.attach(MIMEText(summary, "plain"))
-    msg.attach(MIMEText(html_content, "html"))
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            RESEND_API_URL,
+            headers={
+                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
 
-    await aiosmtplib.send(
-        msg,
-        hostname=settings.SMTP_HOST,
-        port=settings.SMTP_PORT,
-        username=settings.SMTP_USERNAME,
-        password=settings.SMTP_PASSWORD,
-        start_tls=True,
-    )
+    if resp.status_code not in (200, 201):
+        error = resp.json().get("message", resp.text)
+        raise RuntimeError(f"Resend API error ({resp.status_code}): {error}")
 
-    logger.info("Summary email sent to %s via SMTP", recipient)
+    logger.info("Summary email sent to %s via Resend", recipient)
 
 
 def _markdown_to_html(summary: str, filename: str) -> str:

@@ -15,13 +15,10 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     AI_MODEL: str = "llama-3.3-70b-versatile"
 
-    # Email (SMTP)
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USERNAME: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_NAME: str = "Rabbitt AI Sales Insights"
-    SMTP_USE_TLS: bool = True
+    # Email (Resend)
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM_NAME: str = "Rabbitt AI Sales Insights"
+    EMAIL_FROM_ADDRESS: str = "onboarding@resend.dev"
 
     # Rate Limiting
     RATE_LIMIT: str = "10/minute"
