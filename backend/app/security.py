@@ -10,6 +10,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        # Skip security headers for CORS preflight requests
+        if request.method == "OPTIONS":
+            response = await call_next(request)
+            return response
+
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
@@ -20,9 +25,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=()"
-        )
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
         )
         # Generate a unique request ID for tracing
         response.headers["X-Request-ID"] = secrets.token_hex(16)
