@@ -112,20 +112,21 @@ async def upload_and_summarize(
         )
 
     # --- Step 3: Send email ---
+    email_sent = False
     try:
         await send_summary_email(email, summary_text, file.filename or "data")
-    except RuntimeError as e:
-        logger.exception("Email sending failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        email_sent = True
     except Exception as e:
-        logger.exception("Email sending failed unexpectedly")
-        raise HTTPException(
-            status_code=500, detail="Failed to send email. Summary was generated but delivery failed."
-        )
+        logger.exception("Email sending failed: %s", e)
+
+    if email_sent:
+        msg_text = f"Sales brief generated and sent to {email}."
+    else:
+        msg_text = f"Sales brief generated successfully. Email delivery to {email} failed — please copy the summary below."
 
     return UploadResponse(
         success=True,
-        message=f"Sales brief generated and sent to {email}.",
+        message=msg_text,
         summary=summary_text,
         rows_processed=data_summary.get("total_rows", 0),
     )

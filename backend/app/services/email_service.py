@@ -1,5 +1,6 @@
 """Email delivery service using SMTP over SSL."""
 
+import asyncio
 import logging
 import smtplib
 from email.mime.text import MIMEText
@@ -10,14 +11,9 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-async def send_summary_email(recipient: str, summary: str, filename: str) -> None:
-    """Send the AI-generated summary via Gmail SMTP (port 465, direct SSL)."""
+def _send_email_sync(recipient: str, summary: str, filename: str, html_content: str) -> None:
+    """Synchronous SMTP send (runs in a thread)."""
     settings = get_settings()
-
-    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
-        raise RuntimeError("SMTP credentials are not configured.")
-
-    html_content = _markdown_to_html(summary, filename)
 
     msg = MIMEMultipart("alternative")
     msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USERNAME}>"
@@ -30,6 +26,18 @@ async def send_summary_email(recipient: str, summary: str, filename: str) -> Non
     with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
         server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
         server.sendmail(settings.SMTP_USERNAME, recipient, msg.as_string())
+
+
+async def send_summary_email(recipient: str, summary: str, filename: str) -> None:
+    """Send the AI-generated summary via Gmail SMTP (port 465, direct SSL)."""
+    settings = get_settings()
+
+    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
+        raise RuntimeError("SMTP credentials are not configured.")
+
+    html_content = _markdown_to_html(summary, filename)
+
+    await asyncio.to_thread(_send_email_sync, recipient, summary, filename, html_content)
 
     logger.info("Summary email sent to %s via SMTP SSL", recipient)
 
